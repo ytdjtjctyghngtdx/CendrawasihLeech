@@ -8,7 +8,6 @@ import feedparser
 import requests
 import itertools
 
-from telegram.update import Update
 from telegram.ext import CommandHandler
 from telegram import ParseMode
 
@@ -19,34 +18,19 @@ from pyrogram.parser import html as pyrogram_html
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler
 
+# from bot import app, dispatcher, bot
+# from bot.helper.ext_utils import custom_filters
+# from bot.helper.telegram_helper.bot_commands import BotCommands
+# from bot.helper.telegram_helper.filters import CustomFilters
+# from bot.helper.telegram_helper.message_utils import sendMessage
+
+
 from tobrot import app, dispatcher, bot, LOGGER
 from tobrot.helper_funcs.bot_commands import BotCommands
 from tobrot.helper_funcs.filters import CustomFilters
 
 search_lock = asyncio.Lock()
 search_info = {False: dict(), True: dict()}
-
-
-def sendMessage(text: str, bot, update: Update):
-    try:
-        return bot.send_message(update.message.chat_id,
-                                reply_to_message_id=update.message.message_id,
-                                text=text, allow_sending_without_reply=True,  parse_mode='HTMl')
-    except Exception as e:
-        LOGGER.error(str(e))
-
-
-def callback_data(data):
-    def func(flt, client, callback_query):
-        return callback_query.data in flt.data
-
-    data = data if isinstance(data, list) else [data]
-    return filters.create(
-        func,
-        'CustomCallbackDataFilter',
-        data=data
-    )
-
 
 async def return_search(query, page=1, sukebei=False):
     page -= 1
@@ -91,9 +75,8 @@ async def return_search(query, page=1, sukebei=False):
         except IndexError:
             return '', len(results), ttl
 
-message_info = dict()
+message_info = {}
 ignore = set()
-
 
 @app.on_message(filters.command(['nyaasi', f'nyaasi@{bot.username}']))
 async def nyaa_search(client, message):
@@ -102,7 +85,6 @@ async def nyaa_search(client, message):
     query = ' '.join(text)
     await init_search(client, message, query, False)
 
-
 @app.on_message(filters.command(['sukebei', f'sukebei@{bot.username}']))
 async def nyaa_search_sukebei(client, message):
     text = message.text.split(' ')
@@ -110,31 +92,29 @@ async def nyaa_search_sukebei(client, message):
     query = ' '.join(text)
     await init_search(client, message, query, True)
 
-
 async def init_search(client, message, query, sukebei):
     result, pages, ttl = await return_search(query, sukebei=sukebei)
     if not result:
         await message.reply_text('No results found')
     else:
-        buttons = [InlineKeyboardButton(
-            f'1/{pages}', 'nyaa_nop'), InlineKeyboardButton(f'Next', 'nyaa_next')]
+        buttons = [
+            InlineKeyboardButton(f'1/{pages}', 'nyaa_nop'),
+            InlineKeyboardButton('Next', 'nyaa_next'),
+        ]
+
         if pages == 1:
             buttons.pop()
         reply = await message.reply_text(result, reply_markup=InlineKeyboardMarkup([
-            buttons
+            buttons 
         ]))
-        message_info[(reply.chat.id, reply.message_id)
-                     ] = message.from_user.id, ttl, query, 1, pages, sukebei
+        message_info[(reply.chat.id, reply.message_id)] = message.from_user.id, ttl, query, 1, pages, sukebei
 
-
-@app.on_callback_query(callback_data('nyaa_nop'))
+@app.on_callback_query(custom_filters.callback_data('nyaa_nop'))
 async def nyaa_nop(client, callback_query):
     await callback_query.answer(cache_time=3600)
 
 callback_lock = asyncio.Lock()
-
-
-@app.on_callback_query(callback_data(['nyaa_back', 'nyaa_next']))
+@app.on_callback_query(custom_filters.callback_data(['nyaa_back', 'nyaa_next']))
 async def nyaa_callback(client, callback_query):
     message = callback_query.message
     message_identifier = (message.chat.id, message.message_id)
@@ -143,8 +123,7 @@ async def nyaa_callback(client, callback_query):
         if message_identifier in ignore:
             await callback_query.answer()
             return
-        user_id, ttl, query, current_page, pages, sukebei = message_info.get(
-            message_identifier, (None, 0, None, 0, 0, None))
+        user_id, ttl, query, current_page, pages, sukebei = message_info.get(message_identifier, (None, 0, None, 0, 0, None))
         og_current_page = current_page
         if data == 'nyaa_back':
             current_page -= 1
@@ -162,8 +141,12 @@ async def nyaa_callback(client, callback_query):
                 await callback_query.answer('...no', cache_time=3600)
                 return
             text, pages, ttl = await return_search(query, current_page, sukebei)
-        buttons = [InlineKeyboardButton(f'Prev', 'nyaa_back'), InlineKeyboardButton(
-            f'{current_page}/{pages}', 'nyaa_nop'), InlineKeyboardButton(f'Next', 'nyaa_next')]
+        buttons = [
+            InlineKeyboardButton('Prev', 'nyaa_back'),
+            InlineKeyboardButton(f'{current_page}/{pages}', 'nyaa_nop'),
+            InlineKeyboardButton('Next', 'nyaa_next'),
+        ]
+
         if ttl_ended:
             buttons = [InlineKeyboardButton('Search Expired', 'nyaa_nop')]
         else:
@@ -183,7 +166,6 @@ async def nyaa_callback(client, callback_query):
 # Using upstream API based on: https://github.com/Ryuk-me/Torrents-Api
 # Implemented by https://github.com/jusidama18
 
-
 class TorrentSearch:
     index = 0
     query = None
@@ -199,15 +181,11 @@ class TorrentSearch:
         self.source = source.rstrip('/')
         self.RESULT_STR = result_str
 
-        app.add_handler(MessageHandler(self.find, filters.command(
-            [command, f'{self.command}@{bot.username}'])))
-        app.add_handler(CallbackQueryHandler(
-            self.previous, filters.regex(f"{self.command}_previous")))
-        app.add_handler(CallbackQueryHandler(
-            self.delete, filters.regex(f"{self.command}_delete")))
-        app.add_handler(CallbackQueryHandler(
-            self.next, filters.regex(f"{self.command}_next")))
-
+        app.add_handler(MessageHandler(self.find, filters.command([command, f'{self.command}@{bot.username}'])))
+        app.add_handler(CallbackQueryHandler(self.previous, filters.regex(f"{self.command}_previous")))
+        app.add_handler(CallbackQueryHandler(self.delete, filters.regex(f"{self.command}_delete")))
+        app.add_handler(CallbackQueryHandler(self.next, filters.regex(f"{self.command}_next")))
+        
     @staticmethod
     def format_magnet(string: str):
         if not string:
@@ -218,27 +196,26 @@ class TorrentSearch:
         string = self.RESULT_STR.format(**values)
         extra = ""
         if "Files" in values:
-            tmp_str = "❂[{Quality} - {Type} ({Size})]({Torrent}): `{magnet}`"
+            tmp_str = "➲[{Quality} - {Type} ({Size})]({Torrent}): `{magnet}`"
             extra += "\n".join(
                 tmp_str.format(**f, magnet=self.format_magnet(f['Magnet']))
                 for f in values['Files']
             )
         else:
-            # Avoid updating source dict
-            magnet = values.get('magnet', values.get('Magnet'))
+            magnet = values.get('magnet', values.get('Magnet'))  # Avoid updating source dict
             if magnet:
-                extra += f"☠Magnet: `{self.format_magnet(magnet)}`"
+                extra += f"➲Magnet: `{self.format_magnet(magnet)}`"
         if (extra):
             string += "\n" + extra
         return string
 
     async def update_message(self):
         prevBtn = InlineKeyboardButton(
-            f"Prev", callback_data=f"{self.command}_previous")
-        delBtn = InlineKeyboardButton(
-            f"{emoji.CROSS_MARK}", callback_data=f"{self.command}_delete")
-        nextBtn = InlineKeyboardButton(
-            f"Next", callback_data=f"{self.command}_next")
+            'Prev', callback_data=f"{self.command}_previous"
+        )
+
+        delBtn = InlineKeyboardButton(f"{emoji.CROSS_MARK}", callback_data=f"{self.command}_delete")
+        nextBtn = InlineKeyboardButton('Next', callback_data=f"{self.command}_next")
 
         inline = []
         if (self.index != 0):
@@ -247,12 +224,10 @@ class TorrentSearch:
         if (self.index != len(self.response_range) - 1):
             inline.append(nextBtn)
 
-        res_lim = min(self.RESULT_LIMIT, len(
-            self.response) - self.RESULT_LIMIT*self.index)
+        res_lim = min(self.RESULT_LIMIT, len(self.response) - self.RESULT_LIMIT*self.index)
         result = f"**Page - {self.index+1}**\n\n"
-        result += "\n\n≡≡≡≡≡≡≡≡≡≡≡≡≡≡\n\n".join(
-            self.get_formatted_string(
-                self.response[self.response_range[self.index]+i])
+        result += "\n\n=======================\n\n".join(
+            self.get_formatted_string(self.response[self.response_range[self.index]+i])
             for i in range(res_lim)
         )
 
@@ -278,8 +253,7 @@ class TorrentSearch:
                     if (result and isinstance(result[0], list)):
                         result = list(itertools.chain(*result))
                     self.response = result
-                    self.response_range = range(
-                        0, len(self.response), self.RESULT_LIMIT)
+                    self.response_range = range(0, len(self.response), self.RESULT_LIMIT)
         except:
             await self.message.edit("No Results Found.")
             return
@@ -301,11 +275,10 @@ class TorrentSearch:
         self.index += 1
         await self.update_message()
 
-
 RESULT_STR_1337 = (
-    "✘Name: `{Name}`\n"
-    "✘Size: {Size}\n"
-    "✘Seeders: {Seeders} || ✘Leechers: {Leechers}"
+    "➲Name: `{Name}`\n"
+    "➲Size: {Size}\n"
+    "➲Seeders: {Seeders} || ➲Leechers: {Leechers}"
 )
 RESULT_STR_PIRATEBAY = (
     "➲Name: `{Name}`\n"
@@ -313,38 +286,38 @@ RESULT_STR_PIRATEBAY = (
     "➲Seeders: {Seeders} || ➲Leechers: {Leechers}"
 )
 RESULT_STR_TGX = (
-    "⇒Name: `{Name}`\n"
-    "⇒Size: {Size}\n"
-    "⇒Seeders: {Seeders} || ⇒Leechers: {Leechers}"
+    "➲Name: `{Name}`\n" 
+    "➲Size: {Size}\n"
+    "➲Seeders: {Seeders} || ➲Leechers: {Leechers}"
 )
 RESULT_STR_YTS = (
-    "❂Name: `{Name}`\n"
-    "❂Released on: {ReleasedDate}\n"
-    "❂Genre: {Genre}\n"
-    "❂Rating: {Rating}\n"
-    "❂Likes: {Likes}\n"
-    "❂Duration: {Runtime}\n"
-    "❂Language: {Language}"
+    "➲Name: `{Name}`\n"
+    "➲Released on: {ReleasedDate}\n"
+    "➲Genre: {Genre}\n"
+    "➲Rating: {Rating}\n"
+    "➲Likes: {Likes}\n"
+    "➲Duration: {Runtime}\n"
+    "➲Language: {Language}"
 )
 RESULT_STR_EZTV = (
-    "★Name: `{Name}`\n"
-    "★Size: {Size}\n"
-    "★Seeders: {Seeders}"
+    "➲Name: `{Name}`\n"
+    "➲Size: {Size}\n"
+    "➲Seeders: {Seeders}"
 )
 RESULT_STR_TORLOCK = (
-    "✿Name: `{Name}`\n"
-    "✿Size: {Size}\n"
-    "✿Seeders: {Seeders} || ✿Leechers: {Leechers}"
+    "➲Name: `{Name}`\n"
+    "➲Size: {Size}\n"
+    "➲Seeders: {Seeders} || ➲Leechers: {Leechers}"
 )
 RESULT_STR_RARBG = (
-    "⊗Name: `{Name}`\n"
-    "⊗Size: {Size}\n"
-    "⊗Seeders: {Seeders} || ⊗Leechers: {Leechers}"
+    "➲Name: `{Name}`\n"
+    "➲Size: {Size}\n"
+    "➲Seeders: {Seeders} || ➲Leechers: {Leechers}"
 )
 RESULT_STR_ALL = (
-    "❖Name: `{Name}`\n"
-    "❖Size: {Size}\n"
-    "❖Seeders: {Seeders} || ❖ Leechers: {Leechers}"
+    "➲Name: `{Name}`\n"
+    "➲Size: {Size}\n"
+    "➲Seeders: {Seeders} || ➲Leechers: {Leechers}"
 )
 
 TORRENT_API = 'https://api.linkstore.eu.org/api'
@@ -360,13 +333,12 @@ torrents_dict = {
     'ts': {'source': f"{TORRENT_API}/all/", 'result_str': RESULT_STR_ALL}
 }
 
-torrent_handlers = []
-for command, value in torrents_dict.items():
-    torrent_handlers.append(TorrentSearch(
-        command, value['source'], value['result_str']))
+torrent_handlers = [
+    TorrentSearch(command, value['source'], value['result_str'])
+    for command, value in torrents_dict.items()
+]
 
-
-async def searchhelp(self, message):
+def searchhelp(update, context):
     help_string = '''
 <b>Torrent Search</b>
 • /nyaasi <i>[search query]</i>
@@ -380,10 +352,8 @@ async def searchhelp(self, message):
 • /rarbg <i>[search query]</i>
 • /ts <i>[search query]</i>
 '''
-    await message.reply(help_string, parse_mode="HTML")
-    #sendMessage(help_string, context.bot, update)
-
-    # & CustomFilters.mirror_owner_filter Not Used 😉
-SEARCHHELP_HANDLER = CommandHandler(BotCommands.TsHelpCommand, searchhelp, filters=(
-    CustomFilters.authorized_chat | CustomFilters.authorized_user), run_async=True)
+    sendMessage(help_string, context.bot, update)
+    
+    
+SEARCHHELP_HANDLER = CommandHandler(BotCommands.TsHelpCommand, searchhelp, filters=(CustomFilters.authorized_chat | CustomFilters.authorized_user) & CustomFilters.mirror_owner_filter, run_async=True)
 dispatcher.add_handler(SEARCHHELP_HANDLER)
