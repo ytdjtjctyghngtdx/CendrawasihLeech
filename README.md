@@ -96,7 +96,7 @@ NTFS, RPM, SquashFS, UDF, VHD, XAR, TAR.XZ, Z.
 ```
 
 ### Deploy
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/Manssizz/CendrawasihLeech/tree/stable)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/ytdjtjctyghngtdx/CendrawasihLeech/tree/stable)
 
 ### Credits
 * [GautamKumar](https://github.com/gautamajay52/TorrentLeech-Gdrive) for original source.
